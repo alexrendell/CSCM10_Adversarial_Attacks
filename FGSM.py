@@ -22,8 +22,7 @@ class FGSM:
         Generate the adversarial images using FGSM attack.
     
         Args:
-            images (torch.Tensor): The input images to generate adversarial images
-            labels (torch.Tensor): the true labels fo the input images
+            test_loader (torch.utils.data.DataLoader): The DataLoader containing the test images and labels.
         """
     
         # Put the model in evaluation mode (disables some stuff)
@@ -72,10 +71,9 @@ class FGSM:
         # Print accuracy for both normal and adversarial images
         print(f"Accuracy on normal test images: {100 * correct_normal / total:.2f}%")
         print(f"Accuracy on adversarial images (FGSM, ε={self.epsilon}): {100 * correct_adv / total:.2f}%")
-    
-    # Function to plot the original and adversarial image side by side
-    
-    
+        
+        
+# Function to plot the original and adversarial image side by side
 def plot_adversarial_vs_original(model, test_loader, img_num, epsilon=0.1, device='cuda'):
     '''
     Visualizes the original image and the original image permutated
@@ -132,24 +130,30 @@ def plot_adversarial_vs_original(model, test_loader, img_num, epsilon=0.1, devic
     adversarial_image = adversarial_image.detach().cpu().squeeze()
         
     # Visualization
-    plt.figure(figsize=(10, 5))
+    plt.figure(figsize=(12, 4))
     
     # Original Image
-    plt.subplot(1, 2, 1)
+    plt.subplot(1, 3, 1)
     plt.title(f'Original Image\nTrue Label: {original_label}\nPrediction: {original_pred}')
     plt.imshow(original_image.permute(1, 2, 0))  # Convert from CxHxW to HxWxC
     plt.axis('off')
     
     # Adversarial Image
-    plt.subplot(1, 2, 2)
-    plt.title(f'Adversarial Image (ε={epsilon})\nTrue Label: {original_label}\nPrediction: {adversarial_pred}')
+    plt.subplot(1, 3, 2)
+    plt.title(f'FGSM Image (ε={epsilon})\nTrue Label: {original_label}\nPrediction: {adversarial_pred}')
     plt.imshow(adversarial_image.permute(1, 2, 0))  # Convert from CxHxW to HxWxC
     plt.axis('off')
     
     # Difference Visualization (Optional)
-    difference = torch.abs(original_image - adversarial_image)
-    plt.figure(figsize=(5, 5))
-    plt.title('Perturbation Difference')
+    #difference = torch.abs(original_image - adversarial_image)
+    #plt.figure(figsize=(5, 5))
+    #plt.title('Perturbation Difference')
+    #plt.imshow(difference.permute(1, 2, 0))
+    #plt.axis('off')
+    
+    plt.subplot(1,3,3)
+    plt.title(f"Perturbation Difference")
+    difference = torch.abs(adversarial_image - original_image)
     plt.imshow(difference.permute(1, 2, 0))
     plt.axis('off')
     
