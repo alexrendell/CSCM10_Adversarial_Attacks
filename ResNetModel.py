@@ -235,10 +235,31 @@ def train_model_pgd(model, train_loader, val_loader,
                     iters, adversarial_percent, 
                     device='cuda', random_start=True):
     
+    '''
+    trains the ResNetModel using PGD adversarial training.
+    
+    Args:
+        model (torch.nn.Module): The ResNet model to be trained.
+        train_loader (torch.utils.data.DataLoader): DataLoader for training data.
+        val_loader (torch.utils.data.DataLoader): DataLoader for validation data.
+        num_epochs (int): Number of epochs to train the model.
+        batch_size (int): Number of samples in each batch.
+        learning_rate (float): Learning rate for the optimizer.
+        epsilon (float): Maximum perturbation for the adversarial attack.
+        alpha (float): Step size for the adversarial attack.
+        iters (int): Number of iterations for the adversarial attack.
+        adversarial_percent (float): Percentage of training data to use for adversarial training.
+        device (str): Device to use for computation ('cuda' for GPU or 'cpu').
+        random_start (bool): Whether to use random initialization for adversarial perturbations.
+        
+    Returns:
+        model (torch.nn.Module): The trained ResNet model with adversarial training.
+    '''
+    
     # Print starting message
     print('Starting training with PGD adversarial training...')
     
-    model.eval()  # Set the model to evaluation mode initially
+    #model.eval()  # Set the model to evaluation mode initially
     
     # Move model to the specified device (GPU or CPU)
     model = model.to(device)
@@ -250,8 +271,8 @@ def train_model_pgd(model, train_loader, val_loader,
     optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
 
     # Loop over the total number of epochs with a progress bar for all epochs
-    for epoch in tqdm(range(num_epochs), desc='Total Training Progress'):
-        
+    for epoch in range(num_epochs):
+    
         # Print epoch start message
         print(f"\nEpoch {epoch+1} beginning")
 
@@ -262,9 +283,9 @@ def train_model_pgd(model, train_loader, val_loader,
         running_loss = 0.0
         correct = 0
         total = 0
-
+        
         # Loop over batches in the training data loader with progress bar per epoch
-        for batch_idx, (images, labels) in enumerate(tqdm(train_loader, desc=f"Training Epoch {epoch+1}")):
+        for images, labels in tqdm(train_loader, desc=f"Training Epoch {epoch+1}"):
             
             # Move images and labels to the device
             images, labels = images.to(device), labels.to(device)
@@ -328,15 +349,21 @@ def train_model_pgd(model, train_loader, val_loader,
             total += combined_labels.size(0)
 
             # Calculate and print batch loss and accuracy for monitoring
-            batch_loss = loss.item()
-            batch_acc = 100 * (predicted == combined_labels).sum().item() / combined_labels.size(0)
-            print(f"  Batch [{batch_idx+1}/{len(train_loader)}] - Loss: {batch_loss:.4f}, Acc: {batch_acc:.2f}%")
+            #batch_loss = loss.item()
+            #batch_acc = 100 * (predicted == combined_labels).sum().item() / combined_labels.size(0)
+            #print(f"  Batch [{batch_idx+1}/{len(train_loader)}] - Loss: {batch_loss:.4f}, Acc: {batch_acc:.2f}%")
+
+        # Training accuracy for the epoch   
+        train_acc = 100 * correct / total
+        print(f"Epoch [{epoch+1}/{num_epochs}] - Train Loss: {running_loss/len(train_loader):.4f}, Train Acc: {train_acc:.2f}%")
 
         # Compute average training loss for the epoch
-        train_loss_epoch = running_loss / len(train_loader)
+        #train_loss_epoch = running_loss / len(train_loader)
         
         # Compute training accuracy for the epoch
-        train_acc_epoch = 100 * correct / total
+        #train_acc_epoch = 100 * correct / total
+        
+        #print(f"Epoch [{epoch+1}/{num_epochs}] - Train Loss: {train_loss_epoch:.4f}, Train Acc: {train_acc_epoch:.2f}%")
 
         # Set model to evaluation mode for validation (disables dropout etc.)
         model.eval()
@@ -347,40 +374,76 @@ def train_model_pgd(model, train_loader, val_loader,
         val_total = 0
         
         # Disable gradient calculations for validation to save memory/computation
-        with torch.no_grad():
-            # Iterate over validation data loader batches
-            for images, labels in val_loader:
-                # Move validation images and labels to device
-                images, labels = images.to(device), labels.to(device)
-                
-                # Forward pass through the model
-                outputs = model(images)
-                
-                # Calculate loss on validation batch
-                loss = criterion(outputs, labels)
-                
-                # Accumulate validation loss
-                val_loss += loss.item()
-                
-                # Get predicted classes for validation batch
-                _, predicted = torch.max(outputs, 1)
-                
-                # Count correct predictions for validation batch
-                val_correct += (predicted == labels).sum().item()
-                
-                # Accumulate total samples in validation
-                val_total += labels.size(0)
+        #with torch.no_grad():
+        # Iterate over validation data loader batches
+        for images, labels in val_loader:
+            # Move validation images and labels to device
+            images, labels = images.to(device), labels.to(device)
+            
+            # Get batch size
+            full_batch_size = images.size(0)
+            
+            # Calculate how many images in this batch to apply adversarial attack to
+            num_adv = int((adversarial_percent / 100) * full_batch_size)
+            
+            # If adversarial images are required, generate them using PGD attack
+            if num_adv > 0:
+                adv_images = PGD.pgd_attack_group(
+                    model, images[:num_adv], labels[:num_adv],
+                    epsilon=epsilon, alpha=alpha, iters=iters,
+                    device=device, random_start=random_start
+                )
+                # Combine adversarial images with the rest of the clean images in the batch
+                combined_images = torch.cat([adv_images, images[num_adv:]], dim=0)
+                # Combine corresponding labels accordingly
+                combined_labels = torch.cat([labels[:num_adv], labels[num_adv:]], dim=0)
+            
+                # SHuffle the combined images and labels to mix adversarial and clean samples
+                perm = torch.randperm(combined_images.size(0))
+                combined_images = combined_images[perm]
+                combined_labels = combined_labels[perm]
+            
+            else:
+                # If no adversarial images, use original images and labels as is
+                combined_images = images
+                combined_labels = labels
+            
+            # Forward pass through the model
+            outputs = model(combined_images)
+            
+            # Calculate loss on validation batch
+            loss = criterion(outputs, combined_labels)
+            
+            # Accumulate validation loss
+            val_loss += loss.item()
+            
+            # Get predicted classes for validation batch
+            _, predicted = torch.max(outputs, 1)
+            
+            # Count correct predictions for validation batch
+            val_correct += (predicted == combined_labels).sum().item()
+            
+            # Accumulate total samples in validation
+            val_total += combined_labels.size(0)
 
+        # Validation accuracy for the epoch
+        val_acc = 100 * val_correct / val_total
+        
+        # Print the training and validation metrics for each epoch
+        print(f"Epoch [{epoch+1}/{num_epochs}] - Train Loss: {running_loss/len(train_loader):.4f}, "
+            f"Train Acc: {train_acc:.2f}%, Val Loss: {val_loss/len(val_loader):.4f}, "
+            f"Val Acc: {val_acc:.2f}%")
+        
         # Calculate average validation loss for the epoch
-        val_loss_epoch = val_loss / len(val_loader)
+        #val_loss_epoch = val_loss / len(val_loader)
         
         # Calculate validation accuracy for the epoch
-        val_acc_epoch = 100 * val_correct / val_total
+        #val_acc_epoch = 100 * val_correct / val_total
 
         # Print epoch summary showing training and validation loss and accuracy
-        print(f"Epoch [{epoch+1}/{num_epochs}] Summary - "
-              f"Train Loss: {train_loss_epoch:.4f}, Train Acc: {train_acc_epoch:.2f}%, "
-              f"Val Loss: {val_loss_epoch:.4f}, Val Acc: {val_acc_epoch:.2f}%")
+        #print(f"Epoch [{epoch+1}/{num_epochs}] Summary - "
+              #f"Train Loss: {train_loss_epoch:.4f}, Train Acc: {train_acc_epoch:.2f}%, "
+              #f"Val Loss: {val_loss_epoch:.4f}, Val Acc: {val_acc_epoch:.2f}%")
 
     # Print message when training completes
     print("Training complete!")

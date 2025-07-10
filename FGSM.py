@@ -3,7 +3,7 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 
 class FGSM:
-    def __init__(self, model, epsilon=0.1, device='cuda'):
+    def __init__(self, model, epsilon, device='cuda'):
         """
         intialise the FGSM adversarial attack model.
     
