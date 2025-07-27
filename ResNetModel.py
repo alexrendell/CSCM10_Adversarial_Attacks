@@ -25,6 +25,9 @@ class ResNetModel(nn.Module):
         weights = models.ResNet18_Weights.IMAGENET1K_V1 if pretrained else None
         self.resnet = models.resnet18(weights=weights)
         
+        #weights = models.ResNet50_Weights.IMAGENET1K_V1 if pretrained else None
+        #self.resnet = models.resnet50(weights=weights)
+        
         # Load the pretrained ResNet50 model
         # Used for Deep CNNs - image classification - feature extraction
         #self.resnet = models.resnet50(pretrained=pretrained)
@@ -273,6 +276,19 @@ def train_model_pgd(model, train_loader, val_loader,
     # Loop over the total number of epochs with a progress bar for all epochs
     for epoch in range(num_epochs):
     
+        # Slowly adding adversarial percent - TEST
+        if epoch < 3:
+            adv_percent = 10
+        elif epoch < 5:
+            adv_percent = 25
+        elif epoch < 7:
+            adv_percent = 50
+        elif epoch < 10:
+            adv_percent = 75
+        else:
+            adv_percent = adversarial_percent
+
+    
         # Print epoch start message
         print(f"\nEpoch {epoch+1} beginning")
 
@@ -294,7 +310,7 @@ def train_model_pgd(model, train_loader, val_loader,
             full_batch_size = images.size(0)
             
             # Calculate how many images in this batch to apply adversarial attack to
-            num_adv = int((adversarial_percent / 100) * full_batch_size)
+            num_adv = int((adv_percent / 100) * full_batch_size)
 
             # If adversarial images are required, generate them using PGD attack
             if num_adv > 0:
@@ -384,7 +400,7 @@ def train_model_pgd(model, train_loader, val_loader,
             full_batch_size = images.size(0)
             
             # Calculate how many images in this batch to apply adversarial attack to
-            num_adv = int((adversarial_percent / 100) * full_batch_size)
+            num_adv = int((adv_percent / 100) * full_batch_size)
             
             # If adversarial images are required, generate them using PGD attack
             if num_adv > 0:
