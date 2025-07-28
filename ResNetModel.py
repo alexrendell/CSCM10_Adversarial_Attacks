@@ -4,6 +4,7 @@ import torchvision.models as models
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import os
 
 import PGD
 
@@ -22,11 +23,11 @@ class ResNetModel(nn.Module):
         """
         super(ResNetModel, self).__init__()
         
-        weights = models.ResNet18_Weights.IMAGENET1K_V1 if pretrained else None
-        self.resnet = models.resnet18(weights=weights)
+        #weights = models.ResNet18_Weights.IMAGENET1K_V1 if pretrained else None
+        #self.resnet = models.resnet18(weights=weights)
         
-        #weights = models.ResNet50_Weights.IMAGENET1K_V1 if pretrained else None
-        #self.resnet = models.resnet50(weights=weights)
+        weights = models.ResNet50_Weights.IMAGENET1K_V1 if pretrained else None
+        self.resnet = models.resnet50(weights=weights)
         
         # Load the pretrained ResNet50 model
         # Used for Deep CNNs - image classification - feature extraction
@@ -236,7 +237,8 @@ def train_model_pgd(model, train_loader, val_loader,
                     num_epochs, batch_size, 
                     learning_rate, epsilon, alpha, 
                     iters, adversarial_percent, 
-                    device='cuda', random_start=True):
+                    device='cuda', random_start=True,
+                    resume_training=False, checkpoint_path=None):
     
     '''
     trains the ResNetModel using PGD adversarial training.
@@ -273,8 +275,19 @@ def train_model_pgd(model, train_loader, val_loader,
     # Define the optimizer (Stochastic Gradient Descent with momentum)
     optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
 
+    # Initialize starting epoch for training
+    start_epoch = 0  
+    
+    # Resume from checkpoint if necessary
+    if resume_training and os.path.exists(checkpoint_path):
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        start_epoch = checkpoint['epoch'] + 1
+        print(f"Resuming training from epoch {start_epoch + 1}...")
+
     # Loop over the total number of epochs with a progress bar for all epochs
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, num_epochs):
     
         # Slowly adding adversarial percent - TEST
         if epoch < 3:
@@ -460,6 +473,15 @@ def train_model_pgd(model, train_loader, val_loader,
         #print(f"Epoch [{epoch+1}/{num_epochs}] Summary - "
               #f"Train Loss: {train_loss_epoch:.4f}, Train Acc: {train_acc_epoch:.2f}%, "
               #f"Val Loss: {val_loss_epoch:.4f}, Val Acc: {val_acc_epoch:.2f}%")
+
+        # Save checkpoint
+        if checkpoint_path:
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict()
+            }, checkpoint_path)
+            print(f"Checkpoint saved at epoch {epoch + 1}")
 
     # Print message when training completes
     print("Training complete!")
