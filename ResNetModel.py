@@ -13,7 +13,7 @@ class ResNetModel(nn.Module):
     A PyTorch model that wraps a pre-trained ResNet50 network.
     But, changes its parameters to what we need
     """
-    def __init__(self, num_classes=3, pretrained=True):
+    def __init__(self, num_classes=2, pretrained=True):
         """
         Initialize the ResNetModel with our custom layers
         
@@ -135,11 +135,6 @@ def train_model(model, train_loader, val_loader,
     
     # Move the model to specified device
     model = model.to(device)
-
-    # Create data loaders for training and validation datasets
-    # The dataLoader stores the images and their labels
-    #train_loader = torch.utils.data.DataLoader(training_dataset, batch_size=batch_size, shuffle=True)
-    #val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     # Define the loss function (cros-entropy loss)
     criterion = nn.CrossEntropyLoss()
@@ -289,8 +284,10 @@ def train_model_pgd(model, train_loader, val_loader,
     # Loop over the total number of epochs with a progress bar for all epochs
     for epoch in range(start_epoch, num_epochs):
     
+        #adversarial_percent = min(10 + (90 * epoch / 20), 100)
+    
         # Slowly adding adversarial percent - TEST
-        if epoch < 3:
+        if epoch < 6:
             adv_percent = 10
         elif epoch < 5:
             adv_percent = 25
@@ -301,7 +298,6 @@ def train_model_pgd(model, train_loader, val_loader,
         else:
             adv_percent = adversarial_percent
 
-    
         # Print epoch start message
         print(f"\nEpoch {epoch+1} beginning")
 
@@ -377,22 +373,9 @@ def train_model_pgd(model, train_loader, val_loader,
             # Update total number of samples processed so far
             total += combined_labels.size(0)
 
-            # Calculate and print batch loss and accuracy for monitoring
-            #batch_loss = loss.item()
-            #batch_acc = 100 * (predicted == combined_labels).sum().item() / combined_labels.size(0)
-            #print(f"  Batch [{batch_idx+1}/{len(train_loader)}] - Loss: {batch_loss:.4f}, Acc: {batch_acc:.2f}%")
-
         # Training accuracy for the epoch   
         train_acc = 100 * correct / total
         print(f"Epoch [{epoch+1}/{num_epochs}] - Train Loss: {running_loss/len(train_loader):.4f}, Train Acc: {train_acc:.2f}%")
-
-        # Compute average training loss for the epoch
-        #train_loss_epoch = running_loss / len(train_loader)
-        
-        # Compute training accuracy for the epoch
-        #train_acc_epoch = 100 * correct / total
-        
-        #print(f"Epoch [{epoch+1}/{num_epochs}] - Train Loss: {train_loss_epoch:.4f}, Train Acc: {train_acc_epoch:.2f}%")
 
         # Set model to evaluation mode for validation (disables dropout etc.)
         model.eval()
@@ -463,17 +446,6 @@ def train_model_pgd(model, train_loader, val_loader,
             f"Train Acc: {train_acc:.2f}%, Val Loss: {val_loss/len(val_loader):.4f}, "
             f"Val Acc: {val_acc:.2f}%")
         
-        # Calculate average validation loss for the epoch
-        #val_loss_epoch = val_loss / len(val_loader)
-        
-        # Calculate validation accuracy for the epoch
-        #val_acc_epoch = 100 * val_correct / val_total
-
-        # Print epoch summary showing training and validation loss and accuracy
-        #print(f"Epoch [{epoch+1}/{num_epochs}] Summary - "
-              #f"Train Loss: {train_loss_epoch:.4f}, Train Acc: {train_acc_epoch:.2f}%, "
-              #f"Val Loss: {val_loss_epoch:.4f}, Val Acc: {val_acc_epoch:.2f}%")
-
         # Save checkpoint
         if checkpoint_path:
             torch.save({

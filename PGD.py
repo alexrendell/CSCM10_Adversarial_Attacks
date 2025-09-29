@@ -36,10 +36,15 @@ class PGD:
         # Put the model in evaluation mode (disables some stuff)
         self.model.eval()
         
-        # Used to keep track of the number of correct predictions
-        correct_normal, correct_adv, total = 0, 0, 0
+        # Per-class accuracy counters - [Benign (0), Malignant (1)]
+        correct_adv_class = [0, 0]
+        fooled_class = [0, 0]
+        total_per_class = [0, 0]
         
-        # Iterate through the test datasetx
+        # Used to keep track of the number of correct predictions
+        correct_adv, total = 0, 0
+
+        # Iterate through the test dataset
         for images, labels in tqdm(test_loader, desc='PGD Attack Progress'):
             
             # Move images and labels to the same device
@@ -83,18 +88,33 @@ class PGD:
                 # Reconstruct the images after confirming perturbation
                 adv_images = torch.clamp(images + delta, 0, 1)
                 
+            # Evaluate the model on the adversarial images
             with torch.no_grad():
-                normal_preds = self.model(images).argmax(dim=1)
                 adv_preds = self.model(adv_images).argmax(dim=1)
-                
-            # Count the number of correct predictions for normal and adversarial images
-            correct_normal += (normal_preds == labels).sum().item()
-            correct_adv += (adv_preds == labels).sum().item()
-            total+= labels.size(0)
-            
-        print(f"Accuracy on normal test images: {100 * correct_normal / total:.2f}%")
-        print(f"Accuracy on adversarial images (PGD, ε={self.epsilon}, α={self.alpha}, iters={self.iters}): {100 * correct_adv / total:.2f}%")
 
+            # Update total
+            correct_adv += (adv_preds == labels).sum().item()
+            total += labels.size(0)
+            
+            # Update per-class accuracy and fooled counts
+            for i in [0, 1]:
+                index = (labels == i)
+                correct_adv_class[i] += (adv_preds[index] == labels[index]).sum().item()
+                fooled_class[i] += (adv_preds[index] != labels[index]).sum().item()
+                total_per_class[i] += index.sum().item()
+                
+        # Compute all metrics
+        overall_adv_accuracy = 100 * correct_adv / total
+        per_class_accuracy = [100 * correct_adv_class[i] / total_per_class[i] if total_per_class[i] > 0 else 0 
+                              for i in [0, 1]]
+        overall_fooling_rate = 100 * sum(fooled_class) / total
+        per_class_fooling_rate = [100 * fooled_class[i] / total_per_class[i] if total_per_class[i] > 0 else 0 
+                                  for i in [0, 1]]
+        
+            
+        print("Overall Adversarial Accuracy: ", overall_adv_accuracy, "%  Fooling Rate: ", overall_fooling_rate, "%")
+        print("Benign Class Accuracy: ", per_class_accuracy[0], "%  Fooling Rate: ", per_class_fooling_rate[0], "%")
+        print("Malignant Class Accuracy: ", per_class_accuracy[1], "%  Fooling Rate: ", per_class_fooling_rate[1], "%")
         
 def plot_pgd_adversarial_vs_original(model, test_loader, img_num, epsilon=0.1, alpha=0.01, iters=10, random_start=True, device='cuda'):
     """

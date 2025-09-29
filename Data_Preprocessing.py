@@ -18,7 +18,6 @@ transform = transforms.Compose([
     # For 3 RGB channels
     transforms.Normalize(mean=[0.5, 0.5, 0.5],
                          std=[0.5, 0.5, 0.5])
-    #transforms.Normalize(mean=[0.5], std=[0.5])  # Normalize to [-1,1]
 ])
 
 class BreastCancerDataset(Dataset):
@@ -61,9 +60,3 @@ class BreastCancerDataset(Dataset):
                     
     #print("Class BreastCancerDataset is defined correctly")
     
-
-#database_dir = "/Users/alexrendell/Documents/MSc - Advanced Computer Science/CSCM10-Computer_Science_Project_Research_Methods/Databases/BreakHis_BreastCancer"
-
-#dataset = BreastCancerDataset(database_dir, transform=transform)
-
-#print(len(dataset.labels))

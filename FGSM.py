@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 class FGSM:
     def __init__(self, model, epsilon, device='cuda'):
@@ -28,9 +29,17 @@ class FGSM:
         # Put the model in evaluation mode (disables some stuff)
         self.model.eval()
         
-        correct_normal, correct_adv, total = 0, 0, 0
+        # Counters for class-specific accuracy - [Benign (0), Malignant (1)]
+        correct_adv_class = [0, 0]     
+        total_per_class = [0, 0]       
         
-        for images, labels in test_loader:
+        # Overall accuracy counters
+        correct_adv, total = 0, 0
+        
+        # Overall fooling rate
+        fooled_class = [0, 0]
+        
+        for images, labels in tqdm(test_loader, desc="Generating adversarial examples"):
             
             # Move the images and labels to the same device
             images, labels = images.to(self.device), labels.to(self.device)
@@ -60,19 +69,35 @@ class FGSM:
             adversarial_images = torch.clamp(adversarial_images, 0, 1)
     
             # Get the predictions on normal and adversarial images
-            normal_preds = outputs.argmax(dim=1)
             adv_preds = self.model(adversarial_images).argmax(dim=1)
             
-            correct_normal += (normal_preds == labels).sum().item()
+            # Overall accuracy
             correct_adv += (adv_preds == labels).sum().item()
             total += labels.size(0)
             
+            # Class-specific accuracy
+            for i in [0, 1]:
+                index = (labels == i)
+                correct_adv_class[i] += (adv_preds[index] == labels[index]).sum().item()
+                total_per_class[i] += index.sum().item()
+                
+                # Count the fooled images
+                fooled_class[i] += (adv_preds[index] != labels[index]).sum().item()
+                
+        # Compute overall adversarial accuracy
+        overall_adv_accuracy = 100 * correct_adv / total
+        per_class_accuracy = [100 * correct_adv_class[i] / total_per_class[i] if total_per_class[i] > 0 else 0 
+                              for i in [0, 1]]
+        overall_fooling_rate = 100 * sum(fooled_class) / total
+        per_class_fooling_rate = [100 * fooled_class[i] / total_per_class[i] if total_per_class[i] > 0 else 0 
+                                  for i in [0, 1]]
 
-        # Print accuracy for both normal and adversarial images
-        print(f"Accuracy on normal test images: {100 * correct_normal / total:.2f}%")
-        print(f"Accuracy on adversarial images (FGSM, ε={self.epsilon}): {100 * correct_adv / total:.2f}%")
-        
-        
+
+        # Print results
+        print("Overall Adversarial Accuracy: ", overall_adv_accuracy, "%  Fooling Rate: ", overall_fooling_rate, "%")
+        print("Benign Class Accuracy: ", per_class_accuracy[0], "%  Fooling Rate: ", per_class_fooling_rate[0], "%")
+        print("Malignant Class Accuracy: ", per_class_accuracy[1], "%  Fooling Rate: ", per_class_fooling_rate[1], "%")
+
 # Function to plot the original and adversarial image side by side
 def plot_adversarial_vs_original(model, test_loader, img_num, epsilon=0.1, device='cuda'):
     '''
@@ -160,35 +185,3 @@ def plot_adversarial_vs_original(model, test_loader, img_num, epsilon=0.1, devic
     plt.tight_layout()
     plt.show()
         
-    '''
-    def evaluate_adversarial_attack(self, model, test_loader, epsilon):
-        """
-        
-        """
-        
-        model.eval()
-        correct_normal, correct_adv = 0, 0
-        
-        fgsm_attack = FGSM(model, epsilon)
-        
-        for images, labels in test_loader:
-            images, labels = images.to('cuda'), labels.to('cuda')
-            
-            # Get predictions on normal image
-            with torch.np_grad():
-                normal_preds = model(images).argmax(dim=1)
-                
-            # Generate adversarial examples and get predictions
-            adv_images = self.generate_adversarial_images(images, labels)
-            
-            # get adversarial predictions
-            with torch.no_grad():
-                adv_preds = model(adv_images).argmax(dim=1)
-            
-            correct_normal += (normal_preds == labels).sum().item()
-            correct_adv += (adv_preds == labels).sum().item()
-            total += labels.size(0)
-            
-        print(f"Accuracy on normal test images: {100 * correct_normal / total:.2f}%")
-        print(f"Accuracy on adversarial images (FGSM, ε={self.epsilon}): {100 * correct_adv / total:.2f}%")
-    '''  
